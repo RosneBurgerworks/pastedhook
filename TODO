@@ -1,15 +1,5 @@
-update CGameRules and fix navbot
-
-fix crashes (i hope BenCat07 will fix it)
-
-fix explosionspheres (crash)
-
-fix skyboxchanger (not working and crash)
-
-add rev distance to cathook (optional)
-
-fix hitboxupdate in ESP (crash) i had delete it
-
-need regenerate nav files
-
+fix explosionspheres
+fix skyboxchanger
+add rev distance to pastedhook (optional)
 update ClassIDs
+fix and check every signatures, offsets some shit, add more shit and useful features

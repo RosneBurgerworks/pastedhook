@@ -13,7 +13,7 @@ namespace zerokernel_windowclosebutton
 {
 static draw::Texture cross{ paths::getDataPath("/menu/cross.png") };
 static settings::RVariable<rgba_t> background_hover{ "zk.style.window-close-button.color.background-hover", "ff0000" };
-static settings::RVariable<rgba_t> color_border{ "zk.style.window-close-button.color.border", "446498ff" };
+static settings::RVariable<rgba_t> color_border{ "zk.style.window-close-button.color.border", "3c3e40ff" };
 } // namespace zerokernel_windowclosebutton
 
 void zerokernel::WindowCloseButton::render()

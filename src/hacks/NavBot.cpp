@@ -2431,7 +2431,32 @@ static unsigned long long cm_calls = 0;
 static void updateDrawSnapshot();
 #endif
 
+static void CreateMoveImpl();
+
+// Per-second NavBot cost, logged as "NavBotPerf:" next to the NavEngine "NavPerf:" line
 static void CreateMove()
+{
+    static long long total_ns = 0;
+    static unsigned int calls = 0;
+    static auto window_start  = std::chrono::steady_clock::now();
+
+    const auto start = std::chrono::steady_clock::now();
+    CreateMoveImpl();
+    const auto end = std::chrono::steady_clock::now();
+    total_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+    ++calls;
+
+    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - window_start).count();
+    if (*enabled && elapsed_ms >= 1000)
+    {
+        logging::Info("NavBotPerf: calls=%u ms=%.1f (%.0f%% of wall time) task=%s", calls, total_ns / 1e6, total_ns / 1e4 / elapsed_ms, active_task);
+        total_ns     = 0;
+        calls        = 0;
+        window_start = end;
+    }
+}
+
+static void CreateMoveImpl()
 {
     ++cm_calls;
 #if ENABLE_VISUALS

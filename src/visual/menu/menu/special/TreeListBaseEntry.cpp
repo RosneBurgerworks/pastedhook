@@ -9,8 +9,8 @@
   Created on 26.07.18.
 */
 
-static settings::RVariable<rgba_t> background_hover{ "zk.style.tree-list-entry.color.hover", "38b28f66" };
-static settings::RVariable<rgba_t> lines{ "zk.style.tree-list-entry.color.lines", "42BC99ff" };
+static settings::RVariable<rgba_t> background_hover{ "zk.style.tree-list-entry.color.hover", "40424666" };
+static settings::RVariable<rgba_t> lines{ "zk.style.tree-list-entry.color.lines", "3c3e40ff" };
 
 bool zerokernel::TreeListBaseEntry::handleSdlEvent(SDL_Event *event)
 {

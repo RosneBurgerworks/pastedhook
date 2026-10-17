@@ -12,7 +12,7 @@ namespace zerokernel_colorselector
 static settings::RVariable<int> default_width{ "zk.style.input.color.width", "36" };
 static settings::RVariable<int> default_height{ "zk.style.input.color.height", "14" };
 
-static settings::RVariable<rgba_t> border{ "zk.style.input.color.border", "446498ff" };
+static settings::RVariable<rgba_t> border{ "zk.style.input.color.border", "3c3e40ff" };
 } // namespace zerokernel_colorselector
 
 namespace zerokernel

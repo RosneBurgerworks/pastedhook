@@ -6,11 +6,11 @@
 
 namespace zerokernel_textinput
 {
-static settings::RVariable<rgba_t> color_border_active{ "zk.style.input.text.color.border.active", "42BC99ff" };
-static settings::RVariable<rgba_t> color_border{ "zk.style.input.text.color.border.inactive", "446498ff" };
+static settings::RVariable<rgba_t> color_border_active{ "zk.style.input.text.color.border.active", "b5b8bbff" };
+static settings::RVariable<rgba_t> color_border{ "zk.style.input.text.color.border.inactive", "3c3e40ff" };
 
-static settings::RVariable<rgba_t> color_text_active{ "zk.style.input.text.color.text.active", "ffffff" };
-static settings::RVariable<rgba_t> color_text{ "zk.style.input.text.color.text.inactive", "aaaaaa" };
+static settings::RVariable<rgba_t> color_text_active{ "zk.style.input.text.color.text.active", "e8e8e9" };
+static settings::RVariable<rgba_t> color_text{ "zk.style.input.text.color.text.inactive", "9b9d9e" };
 } // namespace zerokernel_textinput
 zerokernel::TextInput::TextInput() : BaseMenuObject{}
 {

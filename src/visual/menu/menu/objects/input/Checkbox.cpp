@@ -8,9 +8,9 @@
 namespace zerokernel_checkbox
 {
 static settings::RVariable<int> checkbox_size{ "zk.style.checkbox.size", "12" };
-static settings::RVariable<rgba_t> color_border{ "zk.style.checkbox.color.border", "446498ff" };
-static settings::RVariable<rgba_t> color_checked{ "zk.style.checkbox.color.checked", "446498ff" };
-static settings::RVariable<rgba_t> color_hover{ "zk.style.checkbox.color.hover", "00a098ff" };
+static settings::RVariable<rgba_t> color_border{ "zk.style.checkbox.color.border", "3c3e40ff" };
+static settings::RVariable<rgba_t> color_checked{ "zk.style.checkbox.color.checked", "b5b8bbff" };
+static settings::RVariable<rgba_t> color_hover{ "zk.style.checkbox.color.hover", "9b9d9eff" };
 } // namespace zerokernel_checkbox
 
 bool zerokernel::Checkbox::onLeftMouseClick()

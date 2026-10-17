@@ -12,7 +12,7 @@
 namespace zerokernel_box
 {
 
-static settings::RVariable<rgba_t> color_border{ "zk.style.box.color.border", "446498ff" };
+static settings::RVariable<rgba_t> color_border{ "zk.style.box.color.border", "3c3e40ff" };
 
 }
 void zerokernel::Box::render()

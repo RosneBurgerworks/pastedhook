@@ -5,7 +5,7 @@
 
 namespace zerokernel_multiselect
 {
-static settings::RVariable<rgba_t> color_border{ "zk.style.input.multiselect.border", "446498ff" };
+static settings::RVariable<rgba_t> color_border{ "zk.style.input.multiselect.border", "3c3e40ff" };
 static settings::RVariable<int> default_width{ "zk.style.input.multiselect.width", "84" };
 static settings::RVariable<int> default_height{ "zk.style.input.multiselect.height", "14" };
 }

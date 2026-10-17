@@ -7,8 +7,8 @@
 
 namespace zerokernel_tooltip
 {
-static settings::RVariable<rgba_t> color_background{ "zk.style.tooltip.background", "1d2f40" };
-static settings::RVariable<rgba_t> color_border{ "zk.style.tooltip.border", "446498ff" };
+static settings::RVariable<rgba_t> color_background{ "zk.style.tooltip.background", "1a1c1e" };
+static settings::RVariable<rgba_t> color_border{ "zk.style.tooltip.border", "3c3e40ff" };
 } // namespace zerokernel_tooltip
 namespace zerokernel
 {

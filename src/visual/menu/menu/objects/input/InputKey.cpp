@@ -9,8 +9,8 @@ namespace zerokernel_inputkey
 static settings::RVariable<int> default_width{ "zk.style.input.key.width", "60" };
 static settings::RVariable<int> default_height{ "zk.style.input.key.height", "14" };
 
-static settings::RVariable<rgba_t> color_border{ "zk.style.input.key.color.border", "446498ff" };
-static settings::RVariable<rgba_t> color_background_capturing{ "zk.style.input.key.color.background.capturing", "38b28f88" };
+static settings::RVariable<rgba_t> color_border{ "zk.style.input.key.color.border", "3c3e40ff" };
+static settings::RVariable<rgba_t> color_background_capturing{ "zk.style.input.key.color.background.capturing", "404246ff" };
 } // namespace zerokernel_inputkey
 zerokernel::InputKey::InputKey() : BaseMenuObject{}
 {

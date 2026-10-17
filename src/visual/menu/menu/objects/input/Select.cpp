@@ -9,7 +9,7 @@
 
 namespace zerokernel_select
 {
-static settings::RVariable<rgba_t> color_border{ "zk.style.input.select.border", "446498ff" };
+static settings::RVariable<rgba_t> color_border{ "zk.style.input.select.border", "3c3e40ff" };
 
 static settings::RVariable<int> default_width{ "zk.style.input.select.width", "60" };
 static settings::RVariable<int> default_height{ "zk.style.input.select.height", "14" };

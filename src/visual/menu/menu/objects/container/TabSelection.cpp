@@ -6,7 +6,7 @@
 #include <menu/object/TabButton.hpp>
 namespace zerokernel_tabselection
 {
-static settings::RVariable<rgba_t> color_border{ "zk.style.tab-selection.color.border", "446498ff" };
+static settings::RVariable<rgba_t> color_border{ "zk.style.tab-selection.color.border", "3c3e40ff" };
 }
 
 namespace zerokernel

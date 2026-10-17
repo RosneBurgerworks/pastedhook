@@ -7,6 +7,7 @@ set(files "${CMAKE_CURRENT_LIST_DIR}/atlas.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/EventLogging.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/overlay.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/picopng.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/ProcStatus.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/SDLHooks.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/tf2_sdl.cpp")
 

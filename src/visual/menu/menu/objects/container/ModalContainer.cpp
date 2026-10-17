@@ -10,8 +10,8 @@
 */
 namespace zerokernel_modalcontainer
 {
-static settings::RVariable<rgba_t> color_border{ "zk.style.modal-container.color.border", "446498ff" };
-static settings::RVariable<rgba_t> color_background{ "zk.style.modal-container.color.background", "1d2f40" };
+static settings::RVariable<rgba_t> color_border{ "zk.style.modal-container.color.border", "3c3e40ff" };
+static settings::RVariable<rgba_t> color_background{ "zk.style.modal-container.color.background", "1a1c1e" };
 } // namespace zerokernel_modalcontainer
 
 bool zerokernel::ModalContainer::handleSdlEvent(SDL_Event *event)

@@ -71,6 +71,27 @@ static struct
     std::string rayfail_detail;
 } navdebug;
 
+// Per-second pathing cost, logged as "NavPerf:" to find where frame time goes
+static struct
+{
+    unsigned int ticks = 0, navto_calls = 0, navto_fails = 0, findpath_calls = 0, solves = 0, traces = 0;
+    unsigned long long blacklist_scans = 0;
+    long long solve_ns = 0, navto_ns = 0, ignores_ns = 0;
+} navperf;
+
+struct ScopedNanos
+{
+    long long &total;
+    std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+    explicit ScopedNanos(long long &total) : total(total)
+    {
+    }
+    ~ScopedNanos()
+    {
+        total += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count();
+    }
+};
+
 const char *getPriorityName(int priority)
 {
     switch (priority)
@@ -125,6 +146,7 @@ static bool CastRay(Vector origin, Vector endpos, unsigned mask, ITraceFilter *f
 
 static bool PassableSide(Vector origin, Vector target, Vector offset, unsigned int mask)
 {
+    ++navperf.traces;
     trace_t trace;
     Ray_t ray;
     ray.Init(origin - offset, target - offset);
@@ -400,6 +422,7 @@ public:
             if (!free_blacklist_blocked)
                 for (auto const &entry : free_blacklist)
                 {
+                    ++navperf.blacklist_scans;
                     if (entry.first == connection.area)
                     {
                         is_blacklisted = true;
@@ -524,6 +547,7 @@ public:
 
         if (state != NavState::Active)
             return {};
+        ++navperf.findpath_calls;
 
         if (log_pathing)
         {
@@ -555,13 +579,16 @@ public:
         };
 
         time_point begin_pathing = high_resolution_clock::now();
-        int result               = pather.Solve(reinterpret_cast<void *>(local), reinterpret_cast<void *>(dest), &pathNodes, &cost);
+        ++navperf.solves;
+        int result = pather.Solve(reinterpret_cast<void *>(local), reinterpret_cast<void *>(dest), &pathNodes, &cost);
         if (result != micropather::MicroPather::SOLVED && result != micropather::MicroPather::START_END_SAME && purgeTransientVischeck())
         {
             pathNodes.clear();
+            ++navperf.solves;
             result = pather.Solve(reinterpret_cast<void *>(local), reinterpret_cast<void *>(dest), &pathNodes, &cost);
         }
         long long timetaken      = duration_cast<nanoseconds>(high_resolution_clock::now() - begin_pathing).count();
+        navperf.solve_ns += timetaken;
         navdebug.last_solve_result = result;
         navdebug.last_solve_nodes  = pathNodes.size();
         navdebug.last_solve_ns     = timetaken;
@@ -584,6 +611,7 @@ public:
         static Timer update_time;
         if (!update_time.test_and_set(1000))
             return;
+        ScopedNanos timed(navperf.ignores_ns);
 
         // Sentries make sounds, so we can just rely on soundcache here and always clear sentries
         NavEngine::clearFreeBlacklist(SENTRY);
@@ -937,8 +965,11 @@ static void blacklistStuckConnectionAndRepath(const char *reason)
 
 bool navTo(const Vector &destination, int priority, bool should_repath, bool nav_to_local, bool is_repath)
 {
+    ++navperf.navto_calls;
+    ScopedNanos timed(navperf.navto_ns);
     auto fail = [&](std::string reason)
     {
+        ++navperf.navto_fails;
         if (log_pathing && reason != navdebug.navto_reason)
             logging::Info("Pathing: navTo failed: %s (dest %.0f,%.0f,%.0f prio %d)", reason.c_str(), destination.x, destination.y, destination.z, priority);
         navdebug.navto_reason = std::move(reason);
@@ -956,6 +987,7 @@ bool navTo(const Vector &destination, int priority, bool should_repath, bool nav
     if (have_failed_dest && destination == last_failed_dest && !navto_fail_cooldown.check(500))
     {
         ++navdebug.navto_fail;
+        ++navperf.navto_fails;
         return false;
     }
     if (log_pathing)
@@ -1489,6 +1521,22 @@ static void checkTeleportReset()
     }
 }
 
+static void logPerf()
+{
+    ++navperf.ticks;
+    static auto window_start = std::chrono::steady_clock::now();
+    static int window_frame  = g_GlobalVars->framecount;
+    const auto now           = std::chrono::steady_clock::now();
+    const auto elapsed_ms    = std::chrono::duration_cast<std::chrono::milliseconds>(now - window_start).count();
+    if (elapsed_ms < 1000)
+        return;
+    const int frames = g_GlobalVars->framecount - window_frame;
+    logging::Info("NavPerf: fps=%.1f ticks=%u navto=%u fail=%u findpath=%u solves=%u solve_ms=%.1f navto_ms=%.1f traces=%u blscan=%llu bl=%zu vc=%zu ignores_ms=%.1f prio=%s", frames * 1000.0 / elapsed_ms, navperf.ticks, navperf.navto_calls, navperf.navto_fails, navperf.findpath_calls, navperf.solves, navperf.solve_ns / 1e6, navperf.navto_ns / 1e6, navperf.traces, navperf.blacklist_scans, map ? map->free_blacklist.size() : 0, map ? map->vischeck_cache.size() : 0, navperf.ignores_ns / 1e6, getPriorityName(current_priority));
+    navperf      = {};
+    window_start = now;
+    window_frame = g_GlobalVars->framecount;
+}
+
 static void CreateMove()
 {
     ++navdebug.cm_calls;
@@ -1503,6 +1551,7 @@ static void CreateMove()
             cancelPath();
         return;
     }
+    logPerf();
     if (!isReady())
         return;
     if (CE_BAD(LOCAL_E) || !LOCAL_E->m_bAlivePlayer())

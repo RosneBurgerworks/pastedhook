@@ -28,8 +28,6 @@ and a lot of useful features, including
 * Automatic matchmaking
 * And many more features!
 
-[FULL LIST OF FEATURES HERE](xxx)
-
 # Installing, updating, attaching (injecting)
 
 Run `./install-all` — choose the graphical or textmode build, then it installs dependencies, builds `libcathook.so`, and installs data files. Then `./attach` with TF2 running.

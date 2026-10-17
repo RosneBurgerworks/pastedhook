@@ -14,3 +14,6 @@ IMGUI_API void ImGui_ImplSdl_NewFrame(SDL_Window *window);
 IMGUI_API bool ImGui_ImplSdl_ProcessEvent(SDL_Event *event);
 IMGUI_API bool ImGui_Impl_CreateFontsTexture(ImFontAtlas *font);
 IMGUI_API void ImGui_Impl_DestroyFontsTexture(ImFontAtlas *font);
+// Upload RGBA8 pixels with whichever renderer the overlay runs on
+IMGUI_API ImTextureID ImGui_Impl_CreateTexture(const unsigned char *rgba, int width, int height, bool linear);
+IMGUI_API void ImGui_Impl_DestroyTexture(ImTextureID texture);

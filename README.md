@@ -1,15 +1,4 @@
-# IMPORTANT NOTICE
-
-# This repository exists solely to **preserve the original Cat Hook code** as it was before its removal from GitHub, kept as close to the original as possible.
-
-# The only work done here are **fixes and updates for new versions of the game**.
-
-# For a proper, working, good cheat, visit the **[sourceassembly/nullhook](https://github.com/sourceassembly/nullhook)** fork.
-
-# USE OPENGL!
-
-# Cathook Training Software
-![banner](https://user-images.githubusercontent.com/13179138/134817300-d4865695-af33-4e83-a017-5ec0d31ea0a1.png)
+# OpenGL and Vulkan (`-vulkan`) are both supported; the overlay picks the renderer automatically.
 
 The port itself is made with ai.
 
@@ -48,7 +37,7 @@ Run `./install-all` — choose the graphical or textmode build, then it installs
 [View our short guide to installing and using cathook](xxxxx)
 
 ## Community
-dsc.gg/unibox
+t.me/burgerhook
 
 ## Reporting Issues
 

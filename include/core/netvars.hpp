@@ -275,7 +275,7 @@ public:
     lazy_netvar m_bInMiniRound{ "DT_BaseTeamObjectiveResource", "m_bInMiniRound" };
     lazy_netvar m_iPreviousPoints{ "DT_BaseTeamObjectiveResource", "m_iPreviousPoints" };
     lazy_netvar m_iBaseControlPoints{ "DT_BaseTeamObjectiveResource", "m_iBaseControlPoints" };
-    lazy_netvar m_iPlayerIndex{ "DT_TFRagdoll", "m_iPlayerIndex" };
+    lazy_netvar m_hPlayer{ "DT_TFRagdoll", "m_hPlayer" };
     lazy_netvar m_hTargetPlayer{ "DT_CHalloweenGiftPickup", "m_hTargetPlayer" };
     lazy_netvar m_flResetTime{ "DT_CaptureFlag", "m_flResetTime" };
     lazy_netvar m_flMaxspeed{ "DT_BasePlayer", "m_flMaxspeed" };

@@ -44,10 +44,11 @@ class Texture
 {
 public:
     explicit Texture(std::string path);
-    Texture(unsigned int id, int h, int w);
+    Texture(void *id, int h, int w);
     ~Texture();
     void load();
-    unsigned int get();
+    // ImTextureID of the active renderer (GL name or DX9 texture wrapper)
+    void *get();
     int getWidth()
     {
         return width;
@@ -59,7 +60,7 @@ public:
 
 private:
     unsigned char *data{ nullptr };
-    unsigned int texture_id{ 0 };
+    void *texture_id{ nullptr };
     std::string path{ "" };
     int height{ 0 };
     int width{ 0 };

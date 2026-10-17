@@ -6,6 +6,7 @@
 #include <cstring>
 #include <initializer_list>
 #include <sys/mman.h>
+#include <unistd.h>
 
 #include "core/maps.hpp"
 
@@ -62,6 +63,31 @@ inline void* resolve_checked_rip_relative(const void* instruction, std::ptrdiff_
 inline void* resolve_lea_rip(const void* instruction)
 {
   return resolve_checked_rip_relative(instruction, 3, 7, {0x48, 0x8D, 0x05});
+}
+
+// Write a pointer into a possibly read-only page (GOT slot, RELRO vtable),
+// restoring the page's original protection afterwards.
+inline bool write_protected_pointer(void** slot, void* value)
+{
+  if (slot == nullptr) {
+    return false;
+  }
+  const long page_size = sysconf(_SC_PAGESIZE);
+  auto* page = reinterpret_cast<void*>(reinterpret_cast<std::uintptr_t>(slot) & ~std::uintptr_t(page_size - 1));
+  const int protection = protection_at(slot);
+  if (mprotect(page, page_size, PROT_READ | PROT_WRITE) != 0) {
+    return false;
+  }
+  *slot = value;
+  int restore = PROT_READ;
+  if (protection & PROT_WRITE) {
+    restore |= PROT_WRITE;
+  }
+  if (protection & PROT_EXEC) {
+    restore |= PROT_EXEC;
+  }
+  mprotect(page, page_size, restore);
+  return true;
 }
 
 inline void* resolve_jmp_slot(const void* instruction)

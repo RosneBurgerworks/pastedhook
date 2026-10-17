@@ -1,4 +1,5 @@
 set(files "${CMAKE_CURRENT_LIST_DIR}/imgui_impl.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/imgui_impl_dx9.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/imgui.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/imgui_draw.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/imgui_freetype.cpp"

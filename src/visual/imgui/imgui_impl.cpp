@@ -1,5 +1,7 @@
 
 #include "visual/imgui/imgui_impl.h"
+#include "visual/imgui/imgui_impl_dx9.h"
+#include "visual/overlay.hpp"
 #include "visual/drawing.hpp"
 #include "visual/imgui/imgui.h"
 #include "visual/imgui/imgui_freetype.h"
@@ -116,7 +118,60 @@ static bool g_MousePressed[3]                             = { false, false, fals
 static SDL_Cursor *g_MouseCursors[ImGuiMouseCursor_COUNT] = { 0 };
 static char *g_ClipboardTextData                          = NULL;
 
+static void ImGui_ImplGL_Render(ImDrawData *draw_data);
+
 void ImGui_Impl_Render(ImDrawData *draw_data)
+{
+    if (overlay::api() == overlay::Api::DX9)
+        ImGui_ImplDX9_Render(draw_data);
+    else
+        ImGui_ImplGL_Render(draw_data);
+}
+
+static ImTextureID ImGui_ImplGL_CreateTexture(const unsigned char *rgba, int width, int height, bool linear)
+{
+    GLuint texture;
+    GLint last_texture, last_unpack_buffer = 0;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &last_texture);
+    glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &last_unpack_buffer);
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, linear ? GL_LINEAR : GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, linear ? GL_LINEAR : GL_NEAREST);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    if (auto bind_buffer = gl_bind_buffer(); bind_buffer && last_unpack_buffer)
+        bind_buffer(GL_PIXEL_UNPACK_BUFFER, 0);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+    if (auto err = glGetError())
+        logging::Info("imgui: texture upload %dx%d glerr=%u", width, height, (unsigned) err);
+    // Restore state
+    if (auto bind_buffer = gl_bind_buffer(); bind_buffer && last_unpack_buffer)
+        bind_buffer(GL_PIXEL_UNPACK_BUFFER, (GLuint) last_unpack_buffer);
+    glBindTexture(GL_TEXTURE_2D, last_texture);
+    return (ImTextureID) (intptr_t) texture;
+}
+
+ImTextureID ImGui_Impl_CreateTexture(const unsigned char *rgba, int width, int height, bool linear)
+{
+    if (overlay::api() == overlay::Api::DX9)
+        return ImGui_ImplDX9_CreateTexture(rgba, width, height, linear);
+    return ImGui_ImplGL_CreateTexture(rgba, width, height, linear);
+}
+
+void ImGui_Impl_DestroyTexture(ImTextureID texture)
+{
+    if (!texture)
+        return;
+    if (overlay::api() == overlay::Api::DX9)
+    {
+        ImGui_ImplDX9_DestroyTexture(texture);
+        return;
+    }
+    GLuint name = (GLuint) (intptr_t) texture;
+    glDeleteTextures(1, &name);
+}
+
+static void ImGui_ImplGL_Render(ImDrawData *draw_data)
 {
     if (!draw_data)
         return;
@@ -433,39 +488,17 @@ bool ImGui_Impl_CreateFontsTexture(ImFontAtlas *font)
                                        // texture id, consider calling GetTexDataAsAlpha8() instead
                                        // to save on GPU memory.
 
-    // Upload texture to graphics system
-    GLuint texture;
-    GLint last_texture, last_unpack_buffer = 0;
-    glGetIntegerv(GL_TEXTURE_BINDING_2D, &last_texture);
-    glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &last_unpack_buffer);
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-    if (auto bind_buffer = gl_bind_buffer(); bind_buffer && last_unpack_buffer)
-        bind_buffer(GL_PIXEL_UNPACK_BUFFER, 0);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-    logging::Info("imgui: font texture id=%u %dx%d unpack_pbo=%d glerr=%u", texture, width, height, (int) last_unpack_buffer,
-                  (unsigned) glGetError());
-
-    // Store our identifier
-    font->TexID = (void *) (intptr_t) texture;
-
-    // Restore state
-    if (auto bind_buffer = gl_bind_buffer(); bind_buffer && last_unpack_buffer)
-        bind_buffer(GL_PIXEL_UNPACK_BUFFER, (GLuint) last_unpack_buffer);
-    glBindTexture(GL_TEXTURE_2D, last_texture);
-
-    return true;
+    // Upload texture to graphics system and store our identifier
+    font->TexID = ImGui_Impl_CreateTexture(pixels, width, height, true);
+    logging::Info("imgui: font texture id=%p %dx%d", font->TexID, width, height);
+    return font->TexID != nullptr;
 }
 
 void ImGui_Impl_DestroyFontsTexture(ImFontAtlas *font)
 {
     if (font)
     {
-        GLuint texture = (GLuint) font->TexID;
-        glDeleteTextures(1, &texture);
+        ImGui_Impl_DestroyTexture(font->TexID);
         font->TexID = 0;
     }
 }
@@ -476,7 +509,7 @@ bool ImGui_ImplSdl_Init()
     io.BackendFlags |= ImGuiBackendFlags_HasMouseCursors; // We can honor GetMouseCursor() values (optional)
     io.BackendFlags |= ImGuiBackendFlags_HasSetMousePos;  // We can honor io.WantSetMousePos requests (optional, rarely used)
     io.BackendPlatformName = "SDL";
-    io.BackendRendererName = "GL";
+    io.BackendRendererName = overlay::api() == overlay::Api::DX9 ? "DX9" : "GL";
 
     // Keyboard mapping. ImGui will use those indices to peek into the io.KeysDown[] array.
     io.KeyMap[ImGuiKey_Tab]        = SDL_SCANCODE_TAB;
@@ -594,7 +627,18 @@ void ImGui_ImplSdl_NewFrame(SDL_Window *window)
     int w, h;
     int display_w, display_h;
     SDL_GetWindowSize(window, &w, &h);
-    SDL_GL_GetDrawableSize(window, &display_w, &display_h);
+    if (overlay::api() == overlay::Api::DX9)
+    {
+        ImGui_ImplDX9_NewFrame();
+        ImGui_ImplDX9_GetBackBufferSize(&display_w, &display_h);
+        if (display_w <= 0 || display_h <= 0)
+        {
+            display_w = w;
+            display_h = h;
+        }
+    }
+    else
+        SDL_GL_GetDrawableSize(window, &display_w, &display_h);
     io.DisplaySize             = ImVec2((float) w, (float) h);
     io.DisplayFramebufferScale = ImVec2(w > 0 ? ((float) display_w / w) : 0, h > 0 ? ((float) display_h / h) : 0);
 

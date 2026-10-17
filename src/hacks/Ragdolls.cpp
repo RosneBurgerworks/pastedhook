@@ -40,7 +40,7 @@ ProxyFnHook ice_hook;
 bool ragdollKillByLocal(void *ragdoll)
 {
     // Get the owner of the ragdoll (TFPlayer)
-    auto owner = g_IEntityList->GetClientEntity(NET_INT(ragdoll, netvar.m_iPlayerIndex));
+    auto owner = g_IEntityList->GetClientEntityFromHandle(NET_VAR(ragdoll, netvar.m_hPlayer, CBaseHandle));
     if (!owner || EntIsDormant(owner))
     {
         return false;

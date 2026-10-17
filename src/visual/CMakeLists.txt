@@ -1,9 +1,11 @@
 set(files "${CMAKE_CURRENT_LIST_DIR}/atlas.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/colors.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/D3D9Hooks.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/drawing.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/drawmgr.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/EffectGlow.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/EventLogging.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/overlay.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/picopng.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/SDLHooks.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/tf2_sdl.cpp")

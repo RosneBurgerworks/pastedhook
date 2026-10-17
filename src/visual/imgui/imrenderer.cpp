@@ -14,28 +14,12 @@
 #include "visual/imgui/imgui_impl.h"
 #include "visual/imgui/imgui_internal.h"
 #include "visual/picopng.hpp"
+#include "visual/overlay.hpp"
 #include <GL/gl.h>
 #include <SDL2/SDL.h>
 #include <fstream>           // Loading files
 #include <mathlib/mathlib.h> // SinCos
 #include <stack>             // Loading textures
-
-#ifndef GL_PIXEL_UNPACK_BUFFER
-#define GL_PIXEL_UNPACK_BUFFER 0x88EC
-#endif
-#ifndef GL_PIXEL_UNPACK_BUFFER_BINDING
-#define GL_PIXEL_UNPACK_BUFFER_BINDING 0x88EF
-#endif
-
-using GlBindBufferFn = void (*)(GLenum, GLuint);
-
-static GlBindBufferFn gl_bind_buffer()
-{
-    static GlBindBufferFn fn;
-    if (!fn)
-        fn = reinterpret_cast<GlBindBufferFn>(SDL_GL_GetProcAddress("glBindBuffer"));
-    return fn;
-}
 
 ImDrawListSharedData shared{};
 ImDrawList bufferA{ &shared };
@@ -135,13 +119,13 @@ Texture::Texture(std::string path) : path{ path }
     textures().push(this);
 }
 
-Texture::Texture(unsigned int id, int h, int w) : texture_id(id), height(h), width(w)
+Texture::Texture(void *id, int h, int w) : texture_id(id), height(h), width(w)
 {
 }
 
 Texture::~Texture()
 {
-    glDeleteTextures(1, &texture_id);
+    ImGui_Impl_DestroyTexture(texture_id);
 }
 
 void Texture::load()
@@ -171,30 +155,13 @@ void Texture::load()
         logging::Info("Error loading texture, error code %i", error);
         throw std::runtime_error("Couldn't init texture!");
     }
-    {
-        // Upload texture to graphics system
-        GLint last_texture, last_unpack_buffer = 0;
-        glGetIntegerv(GL_TEXTURE_BINDING_2D, &last_texture);
-        glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &last_unpack_buffer);
-        glGenTextures(1, &texture_id);
-        glBindTexture(GL_TEXTURE_2D, texture_id);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-        if (auto bind_buffer = gl_bind_buffer(); bind_buffer && last_unpack_buffer)
-            bind_buffer(GL_PIXEL_UNPACK_BUFFER, 0);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-        if (auto err = glGetError())
-            logging::Info("imgui: texture upload %s glerr=%u", path.c_str(), (unsigned) err);
-        // Restore state
-        if (auto bind_buffer = gl_bind_buffer(); bind_buffer && last_unpack_buffer)
-            bind_buffer(GL_PIXEL_UNPACK_BUFFER, (GLuint) last_unpack_buffer);
-        glBindTexture(GL_TEXTURE_2D, last_texture);
-    }
-    return;
+    // Upload texture to graphics system
+    texture_id = ImGui_Impl_CreateTexture(data, width, height, false);
+    if (!texture_id)
+        logging::Info("imgui: texture upload %s failed", path.c_str());
 }
 
-unsigned int Texture::get()
+void *Texture::get()
 {
     return texture_id;
 }
@@ -257,7 +224,10 @@ void renderEnd()
         int verts = 0;
         for (int i = 0; i < drawdata->CmdListsCount; i++)
             verts += drawdata->CmdLists[i]->VtxBuffer.Size;
-        logging::Info("overlay frame lists=%d verts=%d glerr=%u", drawdata->CmdListsCount, verts, (unsigned) glGetError());
+        if (overlay::api() == overlay::Api::GL)
+            logging::Info("overlay frame lists=%d verts=%d glerr=%u", drawdata->CmdListsCount, verts, (unsigned) glGetError());
+        else
+            logging::Info("overlay frame lists=%d verts=%d", drawdata->CmdListsCount, verts);
         overlay_logs++;
     }
 }
@@ -314,7 +284,7 @@ void rectangleTextured(float x, float y, float w, float h, rgba_t color, Texture
     ImVec2 pos[4]    = { center + ImRotate(ImVec2(-w * 0.5f, -h * 0.5f), cos_a, sin_a), center + ImRotate(ImVec2(+w * 0.5f, -h * 0.5f), cos_a, sin_a), center + ImRotate(ImVec2(+w * 0.5f, +h * 0.5f), cos_a, sin_a), center + ImRotate(ImVec2(-w * 0.5f, +h * 0.5f), cos_a, sin_a) };
     ImVec2 uvs[4]    = { ImVec2(tx / tex_width, ty / tex_height), ImVec2((tx + tw) / tex_width, ty / tex_height), ImVec2((tx + tw) / tex_width, (ty + th) / tex_height), ImVec2(tx / tex_width, (ty + th) / tex_height) };
 
-    buffers[currentBuffer]->AddImageQuad((void *) texture.get(), pos[0], pos[1], pos[2], pos[3], uvs[0], uvs[1], uvs[2], uvs[3], ImGui::GetColorU32(ImVec4(color.r, color.g, color.b, color.a)));
+    buffers[currentBuffer]->AddImageQuad(texture.get(), pos[0], pos[1], pos[2], pos[3], uvs[0], uvs[1], uvs[2], uvs[3], ImGui::GetColorU32(ImVec4(color.r, color.g, color.b, color.a)));
 }
 void circle(float x, float y, float radius, rgba_t color, float thickness, int steps)
 {

@@ -20,6 +20,7 @@
 #include <boost/stacktrace.hpp>
 #include <cxxabi.h>
 #include <visual/SDLHooks.hpp>
+#include <visual/D3D9Hooks.hpp>
 #include "hack.hpp"
 #include "common.hpp"
 #include "MiscTemporary.hpp"
@@ -451,6 +452,7 @@ void hack::Hook()
 
 #if ENABLE_VISUALS
     sdl_hooks::applySdlHooks();
+    d3d9_hooks::apply();
 #endif
 
     // FIXME [MP]
@@ -595,6 +597,7 @@ void hack::Shutdown()
     playerlist::Save();
 #if ENABLE_VISUALS
     sdl_hooks::cleanSdlHooks();
+    d3d9_hooks::clean();
 #endif
     logging::Info("Unregistering convars..");
     ConVar_Unregister();

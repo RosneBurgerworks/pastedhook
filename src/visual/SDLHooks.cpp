@@ -29,21 +29,7 @@ static hooked_methods::types::SDL_PollEvent *SDL_PollEvent{ nullptr };
 
 static bool write_pointer_slot(void **slot, void *value)
 {
-    if (!slot)
-        return false;
-    long ps   = sysconf(_SC_PAGESIZE);
-    auto page = reinterpret_cast<void *>(uintptr_t(slot) & ~uintptr_t(ps - 1));
-    int prot  = cathook::core::memory::protection_at(slot);
-    if (mprotect(page, ps, PROT_READ | PROT_WRITE) != 0)
-        return false;
-    *slot = value;
-    int restore = PROT_READ;
-    if (prot & PROT_WRITE)
-        restore |= PROT_WRITE;
-    if (prot & PROT_EXEC)
-        restore |= PROT_EXEC;
-    mprotect(page, ps, restore);
-    return true;
+    return cathook::core::memory::write_protected_pointer(slot, value);
 }
 
 static void **slot_for(const char *name)

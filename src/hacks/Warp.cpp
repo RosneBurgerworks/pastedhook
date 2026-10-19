@@ -16,6 +16,7 @@
 #include "MiscTemporary.hpp"
 #include "Think.hpp"
 #include "Aimbot.hpp"
+#include "NavBot.hpp"
 #include "Tickbase.hpp"
 #include "Warp.hpp"
 #include <Misc.hpp>

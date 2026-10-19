@@ -14,6 +14,7 @@
 #include "MiscAimbot.hpp"
 #include "Misc.hpp"
 #include "helpers.hpp"
+#include "NavBot.hpp"
 
 #include <fstream>
 #include <unistd.h>
@@ -1350,8 +1351,11 @@ bool isAreaValidForStayNear(Vector ent_origin, CNavArea *area, bool fix_local_z 
     return true;
 }
 
-// Actual logic, used to de-duplicate code
-bool stayNearTarget(CachedEntity *ent)
+// Actual logic, used to de-duplicate code.
+// failures_left is shared by every target in one stayNear() run: a failed navTo
+// costs ~25 ms (several full path searches), and when the area around an enemy is
+// unreachable every candidate fails, so trying them all froze the game for seconds.
+bool stayNearTarget(CachedEntity *ent, int &failures_left)
 {
     auto ent_origin = ent->m_vecDormantOrigin();
     // No origin recorded, don't bother
@@ -1383,10 +1387,13 @@ bool stayNearTarget(CachedEntity *ent)
 
     for (auto &area : good_areas)
     {
+        if (failures_left <= 0)
+            return false;
         if (!isAreaValidForStayNear(*ent_origin, area.first, false, true))
             continue;
         if (navparser::NavEngine::navTo(area.first->m_center, staynear, true, !navparser::NavEngine::isPathing()))
             return true;
+        --failures_left;
     }
     return false;
 }
@@ -1522,6 +1529,10 @@ bool stayNear()
     if (navparser::NavEngine::current_priority > staynear)
         return false;
 
+    // Failed paths allowed in this run, across all targets (see stayNearTarget)
+    constexpr int MAX_STAYNEAR_PATH_FAILURES = 3;
+    int failures_left                        = MAX_STAYNEAR_PATH_FAILURES;
+
     // Check and use our previous target if available
     if (isStayNearTargetValid(previous_target))
     {
@@ -1546,7 +1557,7 @@ bool stayNear()
                 return true;
         }
         // Else we try to path again
-        if (stayNearTarget(previous_target))
+        if (stayNearTarget(previous_target, failures_left))
             return true;
         // Failed, invalidate previous target and try others
         previous_target = nullptr;
@@ -1574,7 +1585,7 @@ bool stayNear()
             continue;
         }
         // Succeeded pathing
-        if (stayNearTarget(ent))
+        if (stayNearTarget(ent, failures_left))
         {
             previous_target = ent;
             return true;
@@ -2087,6 +2098,11 @@ bool captureObjectives()
     // No target, bail and set on cooldown
     else if (!target)
     {
+        // The objective went away (e.g. a teammate took the intel we were walking to). Drop our
+        // old capture path, or it keeps capture priority and blocks every other task while we
+        // stand at a target that is no longer there.
+        if (navparser::NavEngine::current_priority == capture)
+            navparser::NavEngine::cancelPath();
         capture_timer.update();
         return false;
     }
@@ -2431,32 +2447,7 @@ static unsigned long long cm_calls = 0;
 static void updateDrawSnapshot();
 #endif
 
-static void CreateMoveImpl();
-
-// Per-second NavBot cost, logged as "NavBotPerf:" next to the NavEngine "NavPerf:" line
 static void CreateMove()
-{
-    static long long total_ns = 0;
-    static unsigned int calls = 0;
-    static auto window_start  = std::chrono::steady_clock::now();
-
-    const auto start = std::chrono::steady_clock::now();
-    CreateMoveImpl();
-    const auto end = std::chrono::steady_clock::now();
-    total_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
-    ++calls;
-
-    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - window_start).count();
-    if (*enabled && elapsed_ms >= 1000)
-    {
-        logging::Info("NavBotPerf: calls=%u ms=%.1f (%.0f%% of wall time) task=%s", calls, total_ns / 1e6, total_ns / 1e4 / elapsed_ms, active_task);
-        total_ns     = 0;
-        calls        = 0;
-        window_start = end;
-    }
-}
-
-static void CreateMoveImpl()
 {
     ++cm_calls;
 #if ENABLE_VISUALS

@@ -56,8 +56,8 @@ constexpr std::size_t get_collision_origin  = 10;
 
 namespace weapon
 {
-constexpr std::size_t get_slot                                = 395;
-constexpr std::size_t get_print_name                          = 401;
+constexpr std::size_t get_slot                                = 399;
+constexpr std::size_t get_print_name                          = 402;
 constexpr std::size_t get_weapon_id                           = 451;
 constexpr std::size_t calc_is_attack_critical_helper          = 468;
 constexpr std::size_t calc_is_attack_critical_helper_no_crits = 469;

@@ -14,7 +14,6 @@
             <AutoVariable width="fill" target="debug.ve.smooth" label="VE smooth"/>
             <AutoVariable width="fill" target="debug.ve.window" label="VE window"/>
             <AutoVariable width="fill" target="aimbot.debug" label="Debug aimbot"/>
-            <AutoVariable width="fill" target="debug.proc-status" label="Process status" tooltip="Show the game process's /proc/self/status (memory, threads, context switches), refreshed every second."/>
         </List>
     </Box>
 </Tab>

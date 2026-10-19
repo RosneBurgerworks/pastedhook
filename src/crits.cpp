@@ -769,7 +769,6 @@ static int last_wep         = 0;
 static std::array<std::string, 32> crit_strings;
 static size_t crit_strings_count{ 0 };
 static std::array<rgba_t, 32> crit_strings_colors{ colors::empty };
-static std::string bar_string = "";
 
 void AddCritString(const std::string &string, const rgba_t &color)
 {
@@ -780,17 +779,8 @@ void AddCritString(const std::string &string, const rgba_t &color)
 
 void DrawCritStrings()
 {
-    float x = *bar_x + *size;
-    float y = *bar_y + *size / 5.0f;
-    if (bar_string != "")
-    {
-        float sx, sy;
-        fonts::center_screen->stringSize(bar_string, &sx, &sy);
-        draw::String(x - sx / 2, (y + sy), colors::red_s, bar_string.c_str(), *fonts::center_screen);
-        y += fonts::center_screen->size + 1;
-    }
-    x = *draw_string_x;
-    y = *draw_string_y;
+    float x = *draw_string_x;
+    float y = *draw_string_y;
     for (size_t i = 0; i < crit_strings_count; ++i)
     {
         float sx, sy;
@@ -799,7 +789,151 @@ void DrawCritStrings()
         y += fonts::center_screen->size + 1;
     }
     crit_strings_count = 0;
-    bar_string         = "";
+}
+
+// Text with a 1px shadow so it stays readable over bright map geometry
+static void shadowedString(float x, float y, const rgba_t &color, const std::string &text)
+{
+    draw::String(int(x + 1.0f), int(y + 1.0f), rgba_t(0.0f, 0.0f, 0.0f, 0.7f), text.c_str(), *fonts::esp);
+    draw::String(int(x), int(y), color, text.c_str(), *fonts::esp);
+}
+
+static float espTextWidth(const std::string &text)
+{
+    float width = 0.0f, height = 0.0f;
+    fonts::esp->stringSize(text, &width, &height);
+    // The font may not be built yet on the first frames
+    return width > 0.0f ? width : float(text.size()) * 7.0f;
+}
+
+static std::string countLabel(int count, const char *noun)
+{
+    return std::to_string(count) + " " + noun + (count == 1 ? "" : "s");
+}
+
+// Bucket meter: a panel with the crit count, the bucket bar and a status line.
+// The bar sits at crit.bar-x/y and is 2*size wide, size/5 tall, as before.
+static void DrawCritMeter(IClientEntity *wep, bool melee_wep, bool can_crit, float bucket, float last_rapid_fire_crit_check, const std::pair<float, float> &crit_mult_info)
+{
+    if (!fonts::esp)
+        return;
+
+    // Same palette as the menu theme; fill colours keep their meaning
+    constexpr rgba_t panel_fill    = colors::FromRGBA8(0x1a, 0x1c, 0x1e, 235);
+    constexpr rgba_t panel_border  = colors::FromRGBA8(0x3c, 0x3e, 0x40, 255);
+    constexpr rgba_t track_color   = colors::FromRGBA8(0x29, 0x2b, 0x2d, 255);
+    constexpr rgba_t title_color   = colors::FromRGBA8(0xe8, 0xea, 0xec, 255);
+    constexpr rgba_t value_color   = colors::FromRGBA8(0xe8, 0xe8, 0xe9, 255);
+    constexpr rgba_t ready_color   = colors::FromRGBA8(0x53, 0xbc, 0x31, 255);
+    constexpr rgba_t forcing_color = colors::FromRGBA8(0x34, 0xeb, 0xae, 255);
+    constexpr rgba_t pending_color = colors::FromRGBA8(0xff, 0xa5, 0x3c, 255);
+    constexpr rgba_t blocked_color = colors::red_s;
+
+    const bool forcing        = shouldCrit();
+    const bool damage_blocked = crit_mult_info.first > crit_mult_info.second && !melee_wep;
+    const bool blocked        = is_out_of_sync || damage_blocked || !can_crit;
+
+    rgba_t fill_color = forcing ? forcing_color : ready_color;
+    if (!can_crit)
+        fill_color = blocked_color;
+
+    // How full the bucket is now, and what is left after the next crit
+    const float cap        = getBucketCap();
+    const float fill       = std::clamp(bucket / cap, 0.0f, 1.0f);
+    float after_next_crit  = std::min(bucket + added_per_shot, cap) - getWithdrawAmount(wep, melee_wep);
+    after_next_crit        = std::clamp(after_next_crit / cap, 0.0f, 1.0f);
+
+    std::string status;
+    rgba_t status_color = pending_color;
+    if (blocked)
+    {
+        if (is_out_of_sync)
+        {
+            status       = "Out of sync";
+            status_color = blocked_color;
+        }
+        else if (crit_banned && !melee_wep)
+            status = std::to_string(int(std::ceil(std::max(0.0f, damage_til_flip)))) + " damage until crit";
+        else if (damage_blocked)
+            status = std::to_string(damageUntilToCrit(wep, melee_wep)) + " damage until crit";
+        else if (isRapidFire(wep))
+        {
+            status = countLabel(std::max(0, next_crit_shots), "shot") + " until crit";
+            const float wait = last_rapid_fire_crit_check + 1.0f - g_GlobalVars->curtime;
+            if (wait >= 0.0f)
+            {
+                char seconds[16];
+                std::snprintf(seconds, sizeof(seconds), " (%.1fs)", wait);
+                status += seconds;
+            }
+        }
+        else
+            status = countLabel(shots_until_crit, "shot") + " until crit";
+    }
+    else
+    {
+        status       = forcing ? "Forcing crits" : "Ready";
+        status_color = forcing ? forcing_color : ready_color;
+    }
+
+    const std::string title       = "CRITS";
+    const std::string crit_count  = std::to_string(std::max(0, available_crits)) + " / " + std::to_string(std::max(0, potential_crits));
+    const rgba_t crit_count_color = can_crit && !damage_blocked ? ready_color : blocked_color;
+    const std::string bucket_text = std::to_string(int(bucket)) + " / " + std::to_string(int(cap));
+
+    constexpr float padding = 6.0f;
+    constexpr float gap     = 12.0f;
+    const float line_height = float(fonts::esp->size + 3);
+    const float bar_left    = float(*bar_x);
+    const float bar_top     = float(*bar_y);
+    const float bar_width   = *size * 2.0f;
+    const float bar_height  = *size / 5.0f;
+
+    // Bucket value goes inside the bar when it is tall enough, else on the status line
+    const bool value_in_bar = bar_height >= line_height - 2.0f;
+
+    const float title_width   = espTextWidth(title);
+    const float count_width   = espTextWidth(crit_count);
+    const float status_width  = espTextWidth(status);
+    const float bucket_width  = espTextWidth(bucket_text);
+    const float content_width = std::max({ bar_width, title_width + gap + count_width, status_width + (value_in_bar ? 0.0f : gap + bucket_width) });
+
+    const float panel_left   = bar_left - padding;
+    const float panel_top    = bar_top - line_height - padding;
+    const float status_top   = bar_top + bar_height + 3.0f;
+    const float panel_width  = content_width + padding * 2.0f;
+    const float panel_height = status_top + line_height + padding * 0.5f - panel_top;
+
+    draw::Rectangle(panel_left, panel_top, panel_width, panel_height, panel_fill);
+    draw::RectangleOutlined(panel_left, panel_top, panel_width, panel_height, panel_border, 1.0f);
+
+    // Header: title on the left, available / potential crits on the right
+    const float header_top = panel_top + padding * 0.5f;
+    shadowedString(bar_left, header_top, title_color, title);
+    shadowedString(bar_left + content_width - count_width, header_top, crit_count_color, crit_count);
+
+    // Bar: empty track, then either the whole bucket (crit not possible) or
+    // what remains after the next crit plus the pulsing cost of that crit
+    draw::Rectangle(bar_left, bar_top, bar_width, bar_height, track_color);
+    if (blocked)
+        draw::Rectangle(bar_left, bar_top, bar_width * fill, bar_height, fill_color);
+    else
+    {
+        const float remaining_width = bar_width * after_next_crit;
+        if (remaining_width > 0.0f)
+            draw::Rectangle(bar_left, bar_top, remaining_width, bar_height, fill_color);
+        const rgba_t cost_color = colors::Fade(fill_color, colors::white, g_GlobalVars->curtime, 2.0f);
+        draw::Rectangle(bar_left + remaining_width, bar_top, bar_width * (fill - after_next_crit), bar_height, cost_color);
+    }
+    draw::RectangleOutlined(bar_left, bar_top, bar_width, bar_height, panel_border, 1.0f);
+
+    if (value_in_bar)
+        shadowedString(bar_left + bar_width - bucket_width - 4.0f, bar_top + (bar_height - line_height) * 0.5f + 1.0f, value_color, bucket_text);
+
+    // Status line, with the bucket value on the right when it didn't fit in the bar
+    shadowedString(bar_left, status_top, status_color, status);
+    if (!value_in_bar)
+        shadowedString(bar_left + content_width - bucket_width, status_top, value_color, bucket_text);
 }
 
 static Timer update_shots{};
@@ -888,66 +1022,8 @@ void Draw()
         AddCritString("Crit Bucket: " + std::to_string(bucket), color);
     }
 
-    if (draw_meter)
-    {
-        if (WeaponCanCrit(wep, true) && added_per_shot)
-        {
-            rgba_t bucket_color = colors::FromRGBA8(0x53, 0xbc, 0x31, 255);
-            if (shouldCrit())
-                bucket_color = colors::FromRGBA8(0x34, 0xeb, 0xae, 255);
-            if (!can_crit)
-                bucket_color = colors::red_s;
-
-            float bucket_percentage = bucket / getBucketCap();
-            float bucket_percentage_post_crit = bucket;
-            bucket_percentage_post_crit += added_per_shot;
-            if (bucket_percentage_post_crit > getBucketCap())
-                bucket_percentage_post_crit = getBucketCap();
-            bucket_percentage_post_crit -= getWithdrawAmount(wep, melee_wep);
-            if (bucket_percentage_post_crit < 0.0f)
-                bucket_percentage_post_crit = 0.0f;
-            bucket_percentage_post_crit /= getBucketCap();
-
-            rgba_t reduction_color = colors::Fade(bucket_color, colors::white, g_GlobalVars->curtime, 2.0f);
-            static rgba_t background_color = colors::FromRGBA8(96, 96, 96, 150);
-            float bar_bg_x_size            = *size * 2.0f;
-            float bar_bg_y_size            = *size / 5.0f;
-            draw::Rectangle(*bar_x - 5.0f, *bar_y - 5.0f, bar_bg_x_size + 10.0f, bar_bg_y_size + 10.0f, background_color);
-
-            if (is_out_of_sync || (crit_mult_info.first > crit_mult_info.second && !melee_wep) || !can_crit)
-            {
-                draw::Rectangle(*bar_x, *bar_y, bar_bg_x_size * bucket_percentage, bar_bg_y_size, bucket_color);
-                if (is_out_of_sync)
-                    bar_string = "Out of sync.";
-                else if (crit_banned && !melee_wep)
-                    bar_string = std::to_string((int) std::ceil(std::max(0.0f, damage_til_flip))) + " Damage until Crit!";
-                else if (crit_mult_info.first > crit_mult_info.second && !melee_wep)
-                    bar_string = std::to_string(damageUntilToCrit(wep, melee_wep)) + " Damage until Crit!";
-                else if (isRapidFire(wep))
-                {
-                    std::string crit_string = std::to_string(std::max(0, next_crit_shots)) + " Shots until Crit! ";
-                    if (info.last_rapid_fire_crit_check + 1.0f >= g_GlobalVars->curtime)
-                        crit_string += std::to_string(info.last_rapid_fire_crit_check + 1.0f - g_GlobalVars->curtime) + "s";
-                    bar_string = crit_string;
-                }
-                else
-                    bar_string = std::to_string(shots_until_crit) + " Shots until Crit!";
-            }
-            if (!((crit_mult_info.first > crit_mult_info.second && !melee_wep) || !can_crit))
-            {
-                float bucket_draw_percentage = bucket_percentage_post_crit;
-                float x_offset_bucket        = bucket_draw_percentage * bar_bg_x_size;
-                if (x_offset_bucket > 0.0f)
-                    draw::Rectangle(*bar_x, *bar_y, x_offset_bucket, bar_bg_y_size, bucket_color);
-                else
-                    x_offset_bucket = 0.0f;
-                float reduction_draw_percentage = bucket_percentage - bucket_percentage_post_crit;
-                if (bucket_draw_percentage < 0.0f)
-                    reduction_draw_percentage += bucket_draw_percentage;
-                draw::Rectangle(*bar_x + x_offset_bucket, *bar_y, bar_bg_x_size * reduction_draw_percentage, bar_bg_y_size, reduction_color);
-            }
-        }
-    }
+    if (draw_meter && WeaponCanCrit(wep, true) && added_per_shot)
+        DrawCritMeter(wep, melee_wep, can_crit, bucket, info.last_rapid_fire_crit_check, crit_mult_info);
 
     last_bucket = bucket;
     last_wep    = EntIndex(wep);

@@ -74,6 +74,7 @@ namespace zerokernel
 {
 
 Menu *Menu::instance{ nullptr };
+std::recursive_mutex Menu::mutex{};
 
 namespace resource::font
 {

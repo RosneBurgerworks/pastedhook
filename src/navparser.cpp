@@ -67,7 +67,7 @@ static struct
     size_t last_solve_nodes = 0;
     unsigned int navto_ok = 0, navto_fail = 0, abandons = 0, cancels = 0;
     unsigned long long cm_calls = 0;
-    unsigned int edge_pass = 0, edge_cachedok = 0, edge_selfbl = 0, edge_freebl = 0, edge_height = 0, edge_cachedbad = 0, edge_rayfail = 0;
+    unsigned int edge_pass = 0, edge_cachedok = 0, edge_selfbl = 0, edge_freebl = 0, edge_height = 0, edge_cachedbad = 0, edge_rayfail = 0, edge_closed = 0;
     std::string rayfail_detail;
 } navdebug;
 
@@ -306,6 +306,52 @@ public:
     bool free_blacklist_blocked = false;
 
     std::unordered_set<CNavArea *> reachable_areas;
+    
+    int closed_gate_flag = 0;
+    int captured_point       = -1;
+    bool capture_state_known = false;
+
+    void onRoundStart()
+    {
+        captured_point      = -1;
+        capture_state_known = true;
+        pather.Reset();
+    }
+
+    void onPointCaptured(int point)
+    {
+        if (point <= captured_point)
+            return;
+        captured_point = point;
+        pather.Reset();
+    }
+
+    void updateClosedAreas()
+    {
+        const int round_state = g_pGameRules->RoundMode();
+        if (!capture_state_known && (g_pGameRules->InSetup() || (round_state >= CGameRules::GR_STATE_PREGAME && round_state <= CGameRules::GR_STATE_PREROUND)))
+            onRoundStart();
+
+        int flag = 0;
+        if (g_pGameRules->InSetup())
+            flag = g_pLocalPlayer->team == TEAM_BLU ? TF_NAV_BLUE_SETUP_GATE : g_pLocalPlayer->team == TEAM_RED ? TF_NAV_RED_SETUP_GATE : 0;
+        if (flag == closed_gate_flag)
+            return;
+        closed_gate_flag = flag;
+        pather.Reset();
+    }
+
+    bool isAreaClosed(const CNavArea *area) const
+    {
+        const int flags = area->m_TFattributeFlags;
+        if (closed_gate_flag && (flags & closed_gate_flag))
+            return true;
+        if (!capture_state_known || !(flags & (TF_NAV_BLOCKED_UNTIL_POINT_CAPTURE | TF_NAV_BLOCKED_AFTER_POINT_CAPTURE)))
+            return false;
+        const int point     = (flags & TF_NAV_WITH_SECOND_POINT) ? 1 : (flags & TF_NAV_WITH_THIRD_POINT) ? 2 : (flags & TF_NAV_WITH_FOURTH_POINT) ? 3 : (flags & TF_NAV_WITH_FIFTH_POINT) ? 4 : 0;
+        const bool captured = captured_point >= point;
+        return (flags & TF_NAV_BLOCKED_UNTIL_POINT_CAPTURE) ? !captured : captured;
+    }
 
     Map(const char *nav_path, std::string level_name) : navfile(nav_path), mapname(std::move(level_name))
     {
@@ -380,6 +426,11 @@ public:
     void AdjacentCost(void *main, std::vector<micropather::StateCost> *adjacent) override
     {
         CNavArea &area = *reinterpret_cast<CNavArea *>(main);
+        if (isAreaClosed(&area))
+        {
+            ++navdebug.edge_closed;
+            return;
+        }
         for (NavConnect &connection : area.m_connections)
         {
             if (!connection.area)
@@ -392,6 +443,12 @@ public:
             if (cached_connection != vischeck_cache.end() && !cached_connection->second.vischeck_state)
             {
                 ++navdebug.edge_selfbl;
+                continue;
+            }
+
+            if (isAreaClosed(connection.area))
+            {
+                ++navdebug.edge_closed;
                 continue;
             }
 
@@ -525,6 +582,8 @@ public:
         if (state != NavState::Active)
             return {};
 
+        updateClosedAreas();
+
         if (log_pathing)
         {
             logging::Info("Start: (%f,%f,%f)", local->m_center.x, local->m_center.y, local->m_center.z);
@@ -534,7 +593,7 @@ public:
         std::vector<void *> pathNodes;
         float cost;
 
-        navdebug.edge_pass = navdebug.edge_cachedok = navdebug.edge_selfbl = navdebug.edge_freebl = navdebug.edge_height = navdebug.edge_cachedbad = navdebug.edge_rayfail = 0;
+        navdebug.edge_pass = navdebug.edge_cachedok = navdebug.edge_selfbl = navdebug.edge_freebl = navdebug.edge_height = navdebug.edge_cachedbad = navdebug.edge_rayfail = navdebug.edge_closed = 0;
         navdebug.rayfail_detail.clear();
 
         auto purgeTransientVischeck = [this]() {
@@ -567,7 +626,7 @@ public:
         navdebug.last_solve_ns     = timetaken;
         if (result != micropather::MicroPather::SOLVED && result != micropather::MicroPather::START_END_SAME)
         {
-            logging::Info("NavDbg: solve fail r=%d | edges pass=%u cok=%u selfbl=%u freebl=%u height=%u cbad=%u rayfail=%u | %s", result, navdebug.edge_pass, navdebug.edge_cachedok, navdebug.edge_selfbl, navdebug.edge_freebl, navdebug.edge_height, navdebug.edge_cachedbad, navdebug.edge_rayfail, navdebug.rayfail_detail.c_str());
+            logging::Info("NavDbg: solve fail r=%d | edges pass=%u cok=%u selfbl=%u closed=%u freebl=%u height=%u cbad=%u rayfail=%u | %s", result, navdebug.edge_pass, navdebug.edge_cachedok, navdebug.edge_selfbl, navdebug.edge_closed, navdebug.edge_freebl, navdebug.edge_height, navdebug.edge_cachedbad, navdebug.edge_rayfail, navdebug.rayfail_detail.c_str());
             pather.Reset();
         }
         if (log_pathing)
@@ -706,6 +765,7 @@ public:
         vischeck_cache.clear();
         connection_stuck_time.clear();
         free_blacklist.clear();
+        capture_state_known = false;
         pather.Reset();
     }
 
@@ -825,7 +885,7 @@ bool isReady()
     if (g_pGameRules->InWaitingForPlayers())
         return fail("waiting for players");
     std::string level_name = GetLevelName();
-    if (level_name == "plr_pipeline" || g_pGameRules->RoundMode() > CGameRules::GR_STATE_PREROUND)
+    if (level_name == "plr_pipeline" || (g_pGameRules->RoundMode() > CGameRules::GR_STATE_PREROUND && !g_pGameRules->InSetup()))
     {
         navdebug.ready_reason.clear();
         return true;
@@ -1600,7 +1660,7 @@ std::vector<std::string> getDebugInfoLines()
     lines.push_back(format("tmr inact:", msSince(inactivity), " crumb:", msSince(time_spent_on_crumb), " | dest (", (int) navdebug.navto_dest.x, ",", (int) navdebug.navto_dest.y, ",", (int) navdebug.navto_dest.z, ") rp:", repath_on_fail ? "1" : "0"));
     lines.push_back(format("navTo: ", navdebug.navto_reason.empty() ? "ok" : navdebug.navto_reason, " ok:", navdebug.navto_ok, " fail:", navdebug.navto_fail));
     lines.push_back(format("solve r:", navdebug.last_solve_result, " n:", navdebug.last_solve_nodes, " us:", navdebug.last_solve_ns / 1000, map ? format(" | bl:", map->free_blacklist.size(), map->free_blacklist_blocked ? "(B)" : "", " vc:", map->vischeck_cache.size(), " sc:", map->connection_stuck_time.size()) : ""));
-    lines.push_back(format("edge p:", navdebug.edge_pass, " cok:", navdebug.edge_cachedok, " | rej sb:", navdebug.edge_selfbl, " fb:", navdebug.edge_freebl, " h:", navdebug.edge_height, " cb:", navdebug.edge_cachedbad, " rf:", navdebug.edge_rayfail));
+    lines.push_back(format("edge p:", navdebug.edge_pass, " cok:", navdebug.edge_cachedok, " | rej sb:", navdebug.edge_selfbl, " cl:", navdebug.edge_closed, " fb:", navdebug.edge_freebl, " h:", navdebug.edge_height, " cb:", navdebug.edge_cachedbad, " rf:", navdebug.edge_rayfail));
     if (!navdebug.rayfail_detail.empty())
         lines.push_back(format("rf: ", navdebug.rayfail_detail));
     if (map && CE_GOOD(LOCAL_E))
@@ -1706,19 +1766,26 @@ void Draw()
 }
 #endif
 
-class CLocalPlayerRespawn : public IGameEventListener
+class CNavEventListener : public IGameEventListener
 {
 public:
     void FireGameEvent(KeyValues *event) override
     {
-        if (map)
+        if (!map)
+            return;
+        const char *name = event->GetName();
+        if (!strcmp(name, "teamplay_round_start"))
+            map->onRoundStart();
+        else if (!strcmp(name, "teamplay_point_captured"))
+            map->onPointCaptured(event->GetInt("cp"));
+        else // localplayer_respawn
             map->pather.Reset();
     }
 };
 
-CLocalPlayerRespawn &listener()
+CNavEventListener &listener()
 {
-    static CLocalPlayerRespawn l{};
+    static CNavEventListener l{};
     return l;
 }
 }
@@ -1799,6 +1866,8 @@ static InitRoutine init(
     []()
     {
         g_IGameEventManager->AddListener(&NavEngine::listener(), "localplayer_respawn", false);
+        g_IGameEventManager->AddListener(&NavEngine::listener(), "teamplay_round_start", false);
+        g_IGameEventManager->AddListener(&NavEngine::listener(), "teamplay_point_captured", false);
         EC::Register(
             EC::Shutdown, []() { g_IGameEventManager->RemoveListener(&NavEngine::listener()); }, "navengine_shutdown");
         EC::Register(EC::CreateMove_NoEnginePred, NavEngine::CreateMove, "navengine_cm");

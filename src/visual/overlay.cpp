@@ -59,7 +59,10 @@ void frame(SDL_Window *window, Api frame_api)
             initialized = true;
         }
         else if (zerokernel::Menu::instance && (draw::width != prev_width || draw::height != prev_height))
+        {
+            std::lock_guard lock(zerokernel::Menu::mutex);
             zerokernel::Menu::instance->resize(draw::width, draw::height);
+        }
         prev_width  = draw::width;
         prev_height = draw::height;
 

@@ -17,6 +17,7 @@ static settings::String cfg_delete{ "cfg.delete", "" };
 
 void refreshConfigList()
 {
+    std::lock_guard lock(zerokernel::Menu::mutex);
     zerokernel::Container *cl = dynamic_cast<zerokernel::Container *>(zerokernel::Menu::instance->wm->getElementById("cfg-list"));
     if (cl)
     {

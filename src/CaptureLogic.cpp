@@ -196,10 +196,13 @@ std::optional<Vector> getClosestPayload(Vector source, int team)
     {
         if (CE_BAD(payload) || payload->m_iClassID() != CL_CLASS(CObjectCartDispenser))
             continue;
-        if (payload->m_vecOrigin().DistTo(source) < best_distance)
+        // The dispenser is parented to the cart, so its networked m_vecOrigin is an offset from
+        // the cart, not a world position. GetAbsOrigin resolves it (fine here, we run in CreateMove).
+        const Vector origin = re::C_BaseEntity::GetAbsOrigin(RAW_ENT(payload));
+        if (origin.DistTo(source) < best_distance)
         {
-            best_pos      = payload->m_vecOrigin();
-            best_distance = payload->m_vecOrigin().DistTo(source);
+            best_pos      = origin;
+            best_distance = origin.DistTo(source);
         }
     }
     return best_pos;

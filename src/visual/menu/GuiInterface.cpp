@@ -114,6 +114,7 @@ class PlayerListEventListener : public IGameEventListener
 public:
     void FireGameEvent(KeyValues *event) override
     {
+        std::lock_guard lock(zerokernel::Menu::mutex);
         if (!controller)
             return;
 
@@ -167,6 +168,7 @@ static PlayerListEventListener listener{};
 
 static void load()
 {
+    std::lock_guard lock(zerokernel::Menu::mutex);
     zerokernel::Menu::instance->loadFromFile(paths::getDataPath("/menu"), "menu.xml");
 
     zerokernel::Container *sv = dynamic_cast<zerokernel::Container *>(zerokernel::Menu::instance->wm->getElementById("special-variables"));
@@ -201,9 +203,12 @@ static CatCommand reload("gui_reload", "Reload", []() { load(); });
 
 void gui::init()
 {
-    zerokernel::Menu::init(draw::width, draw::height);
-    load();
-    init_done = true;
+    {
+        std::lock_guard lock(zerokernel::Menu::mutex);
+        zerokernel::Menu::init(draw::width, draw::height);
+        load();
+        init_done = true;
+    }
 
     EC::Register(
         EC::CreateMove,
@@ -228,6 +233,7 @@ void gui::draw()
     if (!init_done)
         return;
 
+    std::lock_guard lock(zerokernel::Menu::mutex);
     zerokernel::Menu::instance->update();
     if (skin_controller)
         skin_controller->update();
@@ -237,6 +243,7 @@ void gui::draw()
 static Timer update_players{};
 bool gui::handleSdlEvent(SDL_Event *event)
 {
+    std::lock_guard lock(zerokernel::Menu::mutex);
     if (!zerokernel::Menu::instance)
         return false;
     if (controller && g_IEngine && g_IEngine->IsInGame() && update_players.test_and_set(10000))
@@ -281,6 +288,7 @@ bool gui::handleSdlEvent(SDL_Event *event)
 
 void gui::onLevelLoad()
 {
+    std::lock_guard lock(zerokernel::Menu::mutex);
     if (controller)
     {
         controller->removeAll();

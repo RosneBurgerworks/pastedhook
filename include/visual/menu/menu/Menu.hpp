@@ -6,6 +6,7 @@
 #pragma once
 
 #include <SDL2/SDL_events.h>
+#include <mutex>
 #include <settings/Registered.hpp>
 #include <menu/wm/WindowManager.hpp>
 #include <menu/object/container/Container.hpp>
@@ -36,6 +37,9 @@ public:
     Menu(int w, int h);
 
     static Menu *instance;
+    // The menu renders on the present thread (MatQueue0 under queued rendering), while input,
+    // game events and console commands change it from the main thread. Hold this for any access.
+    static std::recursive_mutex mutex;
 
     static void init(int w, int h);
     static void destroy();

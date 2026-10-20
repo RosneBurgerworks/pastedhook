@@ -25,6 +25,7 @@ static settings::Boolean autosave{ "settings.autosave", "true" };
 #if ENABLE_VISUALS
 void refreshConfigList()
 {
+    std::lock_guard lock(zerokernel::Menu::mutex);
     zerokernel::Container *cl = dynamic_cast<zerokernel::Container *>(zerokernel::Menu::instance->wm->getElementById("cfg-list"));
     if (cl)
     {
@@ -211,7 +212,8 @@ static CatCommand list_config("list_config", "", [](const CCommand &args) {
 static std::vector<std::string> sortedVariables{};
 #if ENABLE_VISUALS
 static CatCommand list_missing("list_missing", "List rvars missing in menu", []() {
-    auto *sv = zerokernel::Menu::instance->wm->getElementById("special-variables");
+    std::lock_guard lock(zerokernel::Menu::mutex);
+    auto *sv =zerokernel::Menu::instance->wm->getElementById("special-variables");
     if (!sv)
     {
         logging::Info("Special Variables tab missing!");

@@ -28,7 +28,7 @@ static settings::Boolean search_health("navbot.search-health", "true");
 static settings::Boolean search_ammo("navbot.search-ammo", "true");
 static settings::Boolean stay_near("navbot.stay-near", "true");
 static settings::Boolean capture_objectives("navbot.capture-objectives", "true");
-static settings::Boolean randomize_cpspot("navbot.randomize-cpspot", "true");
+static settings::Boolean randomize_cpspot("navbot.randomize-cpspot", "false");
 static settings::Boolean defend_while_patrolling("navbot.defend-while-patrolling", "false");
 static settings::Boolean snipe_sentries("navbot.snipe-sentries", "true");
 static settings::Boolean snipe_sentries_shortrange("navbot.snipe-sentries.shortrange", "false");

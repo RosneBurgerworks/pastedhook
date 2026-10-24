@@ -58,8 +58,8 @@ constexpr const char* item_schema_lookup_map =
   "48 8B 05 ? ? ? ? 55 48 89 E5 41 55 41 54 48 85 C0 74 ? 4C 8D 60 ?";
 constexpr const char* item_definition_lookup =
   "55 48 89 E5 41 55 41 54 49 89 FC 53 48 83 EC ? 8B 87 ? ? ? ? 85 C0 0F 84 ? ? ? ? 41 89 F1";
-constexpr const char* attribute_definition_lookup =
-  "48 B8 ? ? ? ? ? ? ? ? 55 66 0F EF C0 48 89 E5 41 57 41 56 41 55 41 54 53 48 83 EC 78 44 8B A7 68 02 00 00";
+constexpr const char* attribute_definition_by_name =
+  "48 85 F6 74 ? 55 48 89 E5 53 48 89 FB 48 8D BF A8 02 00 00 48 83 EC 18 48 89 75 E0 48 8D 75 E0 E8 ? ? ? ? 39 83 B8 02 00 00";
 constexpr const char* attribute_list_set_runtime_value =
   "55 48 89 E5 41 57 41 56 49 89 F6 41 55 66 41 0F 7E C5 41 54 49 89 FC 53 48 83 EC 28 8B 57 18 85 D2 7E ? 48 8B 5F 08";
 constexpr const char* inventory_find_item_by_id =

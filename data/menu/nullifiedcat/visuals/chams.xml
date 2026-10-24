@@ -5,6 +5,7 @@
                 <List width="200">
                     <AutoVariable width="fill" target="chams.enable" label="Entity Chams" tooltip="Change textures for visiblity."/>
                     <AutoVariable width="fill" target="chams.legit" label="Legit" tooltip="Don't show chams through walls."/>
+                    <AutoVariable width="fill" target="chams.real-model" label="Real model through walls" tooltip="Draw entities with their own model and textures through walls, weapons and cosmetics included, instead of the chams material. Needs Entity Chams, ignored with Legit."/>
                     <AutoVariable width="fill" target="chams.health" label="Health" tooltip="Color chams according to player health."/>
                     <AutoVariable width="fill" target="chams.recursive" label="Recursive" tooltip="Include weapons in chams."/>
                     <AutoVariable width="fill" target="chams.aimbot.color" label="Aimbot coloring" tooltip="Color the aimbot's target according to color set in Visuals->Colors"/>

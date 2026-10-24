@@ -221,21 +221,6 @@ namespace cpcontroller
 std::array<cp_info, MAX_CONTROL_POINTS+1> controlpoint_data;
 CachedEntity *objective_resource = nullptr;
 
-struct point_ignore
-{
-    std::string mapname;
-    int point_idx;
-    point_ignore(std::string str, int idx) : mapname{ str }, point_idx{ idx } {};
-};
-
-// TODO: Find a way to fix these edge-cases.
-// clang-format off
-std::array<point_ignore, 1> ignore_points
-{
-    point_ignore("cp_steel", 4)
-};
-// clang-format on
-
 // This function updates the Entity used for the Object resource
 void UpdateObjectiveResource()
 {
@@ -372,6 +357,23 @@ bool isPointUseable(int index, int team)
     return true;
 }
 
+// Does another point we don't own yet list this one as a previous point for us? Capturing those
+// first matters on maps where a later point is cappable from the start: cp_steel's final point E
+// only requires itself, but the intended way in is A, B, C and D first.
+bool isSteppingStone(int index, int team)
+{
+    const int num_cp = std::min(GET_NUM_CONTROL_POINTS(), MAX_CONTROL_POINTS);
+    for (int other = 0; other < num_cp; ++other)
+    {
+        if (other == index || GET_OWNING_TEAM(other) == team)
+            continue;
+        for (int prev = 0; prev < MAX_PREVIOUS_POINTS; ++prev)
+            if (GetPreviousPointForPoint(other, team, prev) == index)
+                return true;
+    }
+    return false;
+}
+
 // Update the control points
 void UpdateControlPoints()
 {
@@ -425,35 +427,25 @@ std::optional<Vector> getClosestControlPoint(Vector source, int team)
     if (!GET_NUM_CONTROL_POINTS())
         return std::nullopt;
 
-    int ignore_index = -1;
-    // Do the points need checking because of the map?
-    auto levelname = GetLevelName();
-    for (auto &ignore : ignore_points)
-    {
-        // Try to find map name in bad point array
-        if (levelname.find(ignore.mapname) != levelname.npos)
-            ignore_index = ignore.point_idx;
-    }
-
-    // Find the best and closest control point
+    // Find the best control point: stepping stones first, points that only require themselves (always
+    // cappable, like cp_steel's E) last, and the closest one within the same rank
     std::optional<Vector> best_cp;
+    int best_rank       = INT_MAX;
     float best_distance = FLT_MAX;
     for (auto &cp : controlpoint_data)
     {
-        if (cp.cp_index < 0)
-            continue;
-        // Ignore this point
-        if (cp.cp_index == ignore_index)
+        if (cp.cp_index < 0 || !cp.position)
             continue;
         // They can cap
-        if (isPointUseable(cp.cp_index, team))
+        if (!isPointUseable(cp.cp_index, team))
+            continue;
+        const int rank       = isSteppingStone(cp.cp_index, team) ? 0 : GetPreviousPointForPoint(cp.cp_index, team, 0) == cp.cp_index ? 2 : 1;
+        const float distance = (*cp.position).DistTo(source);
+        if (rank < best_rank || (rank == best_rank && distance < best_distance))
         {
-            // Is it closer?
-            if (cp.position && (*cp.position).DistTo(source) < best_distance)
-            {
-                best_distance = (*cp.position).DistTo(source);
-                best_cp       = cp.position;
-            }
+            best_rank     = rank;
+            best_distance = distance;
+            best_cp       = cp.position;
         }
     }
 

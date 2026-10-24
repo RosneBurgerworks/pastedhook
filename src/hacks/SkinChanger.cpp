@@ -24,38 +24,115 @@ static settings::Boolean enable{ "skinchanger.enable", "false" };
 static settings::Boolean reskin{ "skinchanger.reskin", "false" };
 static settings::Boolean debug{ "skinchanger.debug", "false" };
 
-// Because fuck you, that's why.
-const char *sig_GetAttributeDefinition   = sigs::attribute_definition_lookup;
-const char *sig_SetRuntimeAttributeValue = sigs::attribute_list_set_runtime_value;
-const char *sig_GetItemSchema            = sigs::item_schema_lookup_map;
-
-ItemSystem_t ItemSystem{ nullptr };
-GetAttributeDefinition_t GetAttributeDefinitionFn{ nullptr };
-SetRuntimeAttributeValue_t SetRuntimeAttributeValueFn{ nullptr };
-using GetItemDefinition_t = void *(*)(void *, unsigned);
+// Game functions, resolved once. A signature that misses stays missing: retrying it every network
+// update rescans all of client.so each time.
+using ItemSchema_t                = ItemSchemaPtr_t (*)();
+using GetAttributeDefinitionByName_t = AttributeDefinitionPtr_t (*)(ItemSchemaPtr_t, const char *);
+using SetRuntimeAttributeValue_t  = void (*)(CAttributeList *, AttributeDefinitionPtr_t, float);
+using GetItemDefinition_t         = void *(*)(void *, unsigned);
+using ForceFullUpdate_t           = void (*)(CBaseClientState *);
+static ItemSchema_t ItemSchemaFn{ nullptr };
+static GetAttributeDefinitionByName_t GetAttributeDefinitionByNameFn{ nullptr };
+static SetRuntimeAttributeValue_t SetRuntimeAttributeValueFn{ nullptr };
 static GetItemDefinition_t GetItemDefinitionFn{ nullptr };
-using ForceFullUpdate_t = void (*)(CBaseClientState *);
 static ForceFullUpdate_t ForceFullUpdateFn{ nullptr };
 
-static bool force_item_update = false;
+static void resolve_functions()
+{
+    static bool resolved = false;
+    if (resolved)
+        return;
+    resolved                       = true;
+    ItemSchemaFn                   = ItemSchema_t(gSignatures.GetClientSignature(sigs::item_schema_lookup_map));
+    GetAttributeDefinitionByNameFn = GetAttributeDefinitionByName_t(gSignatures.GetClientSignature(sigs::attribute_definition_by_name));
+    SetRuntimeAttributeValueFn     = SetRuntimeAttributeValue_t(gSignatures.GetClientSignature(sigs::attribute_list_set_runtime_value));
+    GetItemDefinitionFn            = GetItemDefinition_t(gSignatures.GetClientSignature(sigs::item_definition_lookup));
+    ForceFullUpdateFn              = ForceFullUpdate_t(gSignatures.GetEngineSignature(sigs::client_state_force_full_update));
+    logging::Info("SkinChanger: schema %p, attribute by name %p, set attribute %p, item definition %p, full update %p", ItemSchemaFn, GetAttributeDefinitionByNameFn, SetRuntimeAttributeValueFn, GetItemDefinitionFn, ForceFullUpdateFn);
+}
+
+// A full update makes the game rebuild our weapons with the new attributes, and costs a hitch. Menu
+// sliders change on every frame while dragged, so the update waits until changes stop.
+constexpr unsigned full_update_delay_ms = 300;
+static bool update_pending              = false;
+static Timer update_requested{};
 static bool menu_dirty = true;
 
 static void request_update()
 {
-    force_item_update = true;
-    menu_dirty        = true;
+    update_pending = true;
+    update_requested.update();
+    menu_dirty = true;
 }
 
 ItemSchemaPtr_t GetItemSchema(void)
 {
-    static ItemSystem_t fn = nullptr;
-    if (!fn)
+    resolve_functions();
+    return ItemSchemaFn ? ItemSchemaFn() : nullptr;
+}
+
+// Attribute definitions. The game dropped its by-index lookup: each caller now reads the schema's
+// flat table inline, and TF2's own code resolves attributes by name. So the attributes we set are
+// looked up by name, and any other index goes through that table once it agrees with the by-name result.
+struct known_attribute
+{
+    int index;
+    const char *name;
+};
+// Names from tf/scripts/items/items_game.txt
+constexpr known_attribute known_attributes[] = {
+    { 834, "paintkit_proto_def_index" }, { 725, "set_item_texture_wear" },        { 866, "custom_paintkit_seed_lo" },
+    { 867, "custom_paintkit_seed_hi" },  { 731, "weapon_allow_inspect" },         { 370, "attach particle effect static" },
+    { 2053, "is_festivized" },           { 2027, "is australium item" },          { 2022, "loot rarity" },
+    { 542, "item style override" },      { 2025, "killstreak tier" },             { 2014, "killstreak idleeffect" },
+};
+
+// CEconItemSchema: definition pointers indexed by attribute index (CUtlVector<CEconItemAttributeDefinition *>)
+constexpr uintptr_t schema_attribute_table       = 0x2D8;
+constexpr uintptr_t schema_attribute_table_count = 0x2E8;
+// Schema reload counter, which the game's own attribute handle caches are keyed on
+constexpr uintptr_t schema_version = 0x8;
+
+static AttributeDefinitionPtr_t table_definition(ItemSchemaPtr_t schema, int index)
+{
+    const int count = *reinterpret_cast<int *>(uintptr_t(schema) + schema_attribute_table_count);
+    auto table      = *reinterpret_cast<AttributeDefinitionPtr_t **>(uintptr_t(schema) + schema_attribute_table);
+    if (!table || count <= 0 || count > 0xFFFF || index < 0 || index >= count)
+        return nullptr;
+    return table[index];
+}
+
+AttributeDefinitionPtr_t GetAttributeDefinition(int index)
+{
+    ItemSchemaPtr_t schema = GetItemSchema();
+    if (!schema || !GetAttributeDefinitionByNameFn)
+        return nullptr;
+
+    static int cached_version = 0;
+    static bool table_valid   = false;
+    static boost::unordered_flat_map<int, AttributeDefinitionPtr_t> cache;
+    const int version = *reinterpret_cast<int *>(uintptr_t(schema) + schema_version);
+    if (version != cached_version || cache.empty())
     {
-        fn = reinterpret_cast<ItemSystem_t>(gSignatures.GetClientSignature(sigs::item_schema_lookup_map));
-        if (!fn)
-            return nullptr;
+        cache.clear();
+        cached_version = version;
+        // Trust the table only if it finds the same definition as the game's by-name lookup
+        AttributeDefinitionPtr_t wear = GetAttributeDefinitionByNameFn(schema, "set_item_texture_wear");
+        table_valid                   = wear && table_definition(schema, 725) == wear;
+        if (!table_valid)
+            logging::Info("SkinChanger: attribute table layout changed, only named attributes are available");
     }
-    return fn();
+    if (auto it = cache.find(index); it != cache.end())
+        return it->second;
+
+    AttributeDefinitionPtr_t definition = nullptr;
+    for (const auto &attribute : known_attributes)
+        if (attribute.index == index)
+            definition = GetAttributeDefinitionByNameFn(schema, attribute.name);
+    if (!definition && table_valid)
+        definition = table_definition(schema, index);
+    cache[index] = definition;
+    return definition;
 }
 
 CAttribute::CAttribute(uint16_t iAttributeDefinitionIndex, float flValue)
@@ -96,10 +173,14 @@ CAttributeList::CAttributeList()
 
 void CAttributeList::SetAttribute(int index, float value)
 {
-    ItemSchemaPtr_t schema = GetItemSchema();
-    if (!schema || !GetAttributeDefinitionFn || !SetRuntimeAttributeValueFn)
+    // Already set: SetRuntimeAttributeValue notifies the attribute manager even when nothing changes,
+    // which throws away the weapon's attribute caches. Compare bits, integer attributes are stored as such.
+    for (int i = 0; i < m_Attributes.Count(); ++i)
+        if (m_Attributes[i].defidx == index && std::memcmp(&m_Attributes[i].value, &value, sizeof(value)) == 0)
+            return;
+    if (!SetRuntimeAttributeValueFn)
         return;
-    AttributeDefinitionPtr_t attrib = GetAttributeDefinitionFn(schema, index);
+    AttributeDefinitionPtr_t attrib = GetAttributeDefinition(index);
     if (!attrib)
         return;
     SetRuntimeAttributeValueFn(this, attrib, value);
@@ -742,6 +823,7 @@ static void force_full_update()
 {
     if (!g_IBaseClientState)
         return;
+    resolve_functions();
     if (ForceFullUpdateFn)
     {
         if (g_IBaseClientState->m_nDeltaTick() == -1)
@@ -959,8 +1041,6 @@ static CatCommand reset("skinchanger_reset", "Reset",
 static CatCommand dump_itemdef("skinchanger_dump_def", "Dump CEconItemDefinition for the active weapon",
                                []()
                                {
-                                   if (!GetItemDefinitionFn)
-                                       GetItemDefinitionFn = GetItemDefinition_t(gSignatures.GetClientSignature(sigs::item_definition_lookup));
                                    void *schema = GetItemSchema();
                                    if (CE_BAD(LOCAL_W) || !schema || !GetItemDefinitionFn)
                                    {
@@ -1242,36 +1322,16 @@ void FrameStageNotify(int stage)
         was_reskin        = bool(reskin);
         request_update();
     }
-    if (force_item_update)
+    if (update_pending && update_requested.check(full_update_delay_ms))
     {
-        force_item_update = false;
+        update_pending = false;
         force_full_update();
     }
     if (!enable)
         return;
     if (CE_BAD(LOCAL_E) || !netvar.hMyWeapons)
         return;
-
-    if (!SetRuntimeAttributeValueFn)
-    {
-        SetRuntimeAttributeValueFn = (SetRuntimeAttributeValue_t) (gSignatures.GetClientSignature((char *) sig_SetRuntimeAttributeValue));
-        logging::Info("SetRuntimeAttributeValue: %p", SetRuntimeAttributeValueFn);
-    }
-    if (!GetAttributeDefinitionFn)
-    {
-        GetAttributeDefinitionFn = (GetAttributeDefinition_t) (gSignatures.GetClientSignature((char *) sig_GetAttributeDefinition));
-        logging::Info("GetAttributeDefinition: %p", GetAttributeDefinitionFn);
-    }
-    if (!GetItemDefinitionFn)
-    {
-        GetItemDefinitionFn = GetItemDefinition_t(gSignatures.GetClientSignature(sigs::item_definition_lookup));
-        logging::Info("GetItemDefinition: %p", GetItemDefinitionFn);
-    }
-    if (!ForceFullUpdateFn)
-    {
-        ForceFullUpdateFn = ForceFullUpdate_t(gSignatures.GetEngineSignature(sigs::client_state_force_full_update));
-        logging::Info("ForceFullUpdate: %p", ForceFullUpdateFn);
-    }
+    resolve_functions();
 
     weapon_list   = (int *) ((uintptr_t) (RAW_ENT(LOCAL_E)) + netvar.hMyWeapons);
     my_weapon     = CE_INT(g_pLocalPlayer->entity, netvar.hActiveWeapon);
@@ -1284,7 +1344,7 @@ void FrameStageNotify(int stage)
     {
         handle = weapon_list[i];
         eid    = HandleToIDX(handle);
-        if (eid <= MAX_PLAYERS || eid > HIGHEST_ENTITY)
+        if (eid <= g_GlobalVars->maxClients || eid > HIGHEST_ENTITY)
             continue;
         entity = g_IEntityList->GetClientEntity(eid);
         if (!entity)
@@ -1531,15 +1591,7 @@ void def_attribute_modifier::Apply(int entity)
 
 def_attribute_modifier &GetModifier(int idx)
 {
-    try
-    {
-        return modifier_map.at(idx);
-    }
-    catch (std::out_of_range &oor)
-    {
-        modifier_map.emplace(idx, def_attribute_modifier{});
-        return modifier_map.at(idx);
-    }
+    return modifier_map.try_emplace(idx).first->second;
 }
 // A map that maps an Item Definition Index to a modifier
 boost::unordered_flat_map<int, def_attribute_modifier> modifier_map{};

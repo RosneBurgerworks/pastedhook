@@ -41,7 +41,7 @@ static settings::Boolean look{ "nav.look-at-path", "false" };
 static settings::Boolean look_legit{ "nav.look-at-path-legit", "false" };
 static settings::Boolean draw_debug_areas("nav.draw.debug-areas", "false");
 static settings::Boolean log_pathing{ "nav.log", "false" };
-static settings::Int stuck_time{ "nav.stuck-time", "800" };
+static settings::Int stuck_time{ "nav.stuck-time", "400" };
 static settings::Int aim_speed{ "nav.smooth-speed", "7" };
 static settings::Int vischeck_cache_time{ "nav.vischeck-cache.time", "240" };
 static settings::Boolean vischeck_runtime{ "nav.vischeck-runtime.enabled", "true" };

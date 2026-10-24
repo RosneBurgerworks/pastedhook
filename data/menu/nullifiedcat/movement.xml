@@ -41,6 +41,7 @@
             <AutoVariable width="fill" target="nav.look-at-path" label="Look at path"/>
             <AutoVariable width="fill" target="navbot.enabled" label="Enable NavBot"/>
             <AutoVariable width="fill" target="navbot.capture-objectives" label="Capture objectives" tooltip="Automatically capture objectives (CTF, CP, and PL only)."/>
+            <AutoVariable width="fill" target="navbot.randomize-cpspot" label="Randomize CP spot" tooltip="Stand at a random spot near the control point instead of its centre. Off: walk to the centre and stay on it."/>
             <AutoVariable width="fill" target="navbot.defend-while-patrolling" label="Defend while patrolling" tooltip="When roaming, stand on our control point or payload. Off by default."/>
             <AutoVariable width="fill" target="nav.path-during-setup" label="Path during setup" tooltip="Path during setup. Will also path while the gates are closed."/>
             <AutoVariable width="fill" target="navbot.search-health" label="Search health"/>

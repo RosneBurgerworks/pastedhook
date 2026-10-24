@@ -66,16 +66,16 @@ public:
     inline static IClientEntity *FirstMoveChild(IClientEntity *self)
     {
         const int off = netvar.moveparent;
-        if (!self || off < 24)
+        if (!self || off < 12)
             return nullptr;
-        return FromHandle(*(int *) ((uintptr_t) self + off - 24));
+        return FromHandle(*(int *) ((uintptr_t) self + off - 12));
     }
     inline static IClientEntity *NextMovePeer(IClientEntity *self)
     {
         const int off = netvar.moveparent;
-        if (!self || off < 16)
+        if (!self || off < 8)
             return nullptr;
-        return FromHandle(*(int *) ((uintptr_t) self + off - 16));
+        return FromHandle(*(int *) ((uintptr_t) self + off - 8));
     }
 };
 } // namespace re

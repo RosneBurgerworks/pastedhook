@@ -49,6 +49,7 @@ static settings::Boolean pipes_local{ "chams.show.pipes.local", "true" };
 static settings::Boolean teammate_buildings{ "chams.show.teammate-buildings", "false" };
 static settings::Boolean recursive{ "chams.recursive", "true" };
 static settings::Boolean legit{ "chams.legit", "false" };
+static settings::Boolean real_model{ "chams.real-model", "false" };
 static settings::Boolean singlepass{ "chams.single-pass", "false" };
 static settings::Boolean chamsself{ "chams.self", "true" };
 static settings::Boolean weapons{ "chams.weapons", "false" };
@@ -483,6 +484,31 @@ void RenderChamsRecursive(IClientEntity *entity, CMaterialReference &mat, IVMode
     }
 #endif
 }
+void DrawRealModelThroughWalls(IClientEntity *entity, IVModelRender *this_, const DrawModelState_t &state, const ModelRenderInfo_t &info, matrix3x4_t *bone)
+{
+#if !ENFORCE_STREAM_SAFETY
+    g_IVModelRender->ForcedMaterialOverride(nullptr);
+    MatRenderScope ptr(GET_RENDER_CONTEXT);
+    ptr->DepthRange(0.1f, 0.11f);
+    original::DrawModelExecute(this_, state, info, bone);
+    // Weapons, hats and other cosmetics are separate entities parented to the player. Always draw
+    // them here, whatever "Recursive" says: the model without its gear looks broken.
+    IClientEntity *attach = re::C_BaseEntity::FirstMoveChild(entity);
+    for (int passes = 0; attach && passes < 32; ++passes, attach = re::C_BaseEntity::NextMovePeer(attach))
+    {
+        if (!EntRenderableShouldDraw(attach))
+            continue;
+        // Skip the engine's own draw of it later this frame, like RenderAttachment does
+        attachment_draw_list.emplace_back(EntIndex(attach), EntIndex(entity));
+        chams_attachment_drawing = true;
+        EntDrawModel(attach, 1);
+        chams_attachment_drawing = false;
+    }
+    ptr->DepthRange(0.0f, 1.0f);
+#else
+    original::DrawModelExecute(this_, state, info, bone);
+#endif
+}
 
 // Purpose => Apply and render chams according to settings
 void ApplyChams(ChamColors colors, bool recurse, bool render_original, bool overlay, bool ignorez, bool wireframe, bool firstperson, IClientEntity *entity, IVModelRender *this_, const DrawModelState_t &state, const ModelRenderInfo_t &info, matrix3x4_t *bone)
@@ -759,7 +785,9 @@ DEFINE_HOOKED_METHOD(DrawModelExecute, void, IVModelRender *this_, const DrawMod
                         original_color.a = g_IVRenderView->GetBlend();
 
                         // Player and entity chams
-                        if (enable)
+                        if (enable && real_model && !legit)
+                            DrawRealModelThroughWalls(entity, this_, state, info, bone);
+                        else if (enable)
                         {
                             // First time has ignorez, 2nd time not
                             for (int i = 1; i >= 0; i--)

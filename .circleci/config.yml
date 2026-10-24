@@ -1,18 +1,54 @@
-version: 2
+version: 2.1
+
+# A current Arch image: the code needs a recent GCC (C++23) and Boost 1.81+ (unordered_flat_map), which
+# the old nullworks/cathook-docker-ci-arch image doesn't have. The packages match install-deps.
+executors:
+  arch:
+    docker:
+      - image: archlinux:latest
+    resource_class: medium
+
+commands:
+  setup:
+    steps:
+      - run:
+          name: Install build dependencies
+          # git and openssh first: the checkout step needs them
+          command: pacman -Syu --needed --noconfirm base-devel cmake git openssh sdl2 boost freetype2 libxcb libglvnd
+      - checkout
+      - run:
+          name: Stub TF2 libraries
+          # pastedhook links against TF2's libtier0 and libvstdlib, which the game provides at runtime. CI has no
+          # TF2, and a shared library may leave symbols unresolved, so empty libraries with those names do.
+          command: |
+            mkdir -p /tmp/tf2-stubs
+            for lib in tier0 vstdlib; do
+              gcc -shared -fPIC -o /tmp/tf2-stubs/lib$lib.so -Wl,-soname,lib$lib.so -x c /dev/null
+            done
+
 jobs:
-    build:
-      docker:
-        - image: nullworks/cathook-docker-ci-arch:latest
-      steps:
-        - checkout
-        - run: 
-            name: "Compiling cathook"
-            command: git submodule update --init --recursive; mkdir build; cd build; cmake -DEnableWarnings=0 ..; make -j8; cd ..
-    textmode_build:
-      docker:
-        - image: nullworks/cathook-docker-ci-arch:latest
-      steps:
-        - checkout
-        - run: 
-            name: "Compiling textmode cathook"
-            command: git submodule update --init --recursive; mkdir build; cd build; cmake -DCMAKE_BUILD_TYPE=Release -DVisuals_DrawType="Textmode" -DVACBypass=1 -DEnableWarnings=0 ..; make -j8; cd ..
+  build:
+    executor: arch
+    steps:
+      - setup
+      - run:
+          name: Compiling pastedhook
+          command: |
+            cmake -B build -DEnableWarnings=0 -DTF2_LINUX64_DIR=/tmp/tf2-stubs
+            cmake --build build -j2
+  textmode_build:
+    executor: arch
+    steps:
+      - setup
+      - run:
+          name: Compiling textmode pastedhook
+          command: |
+            cmake -B build -DCMAKE_BUILD_TYPE=Release -DVisuals_DrawType=Textmode -DVACBypass=1 -DEnableWarnings=0 -DTF2_LINUX64_DIR=/tmp/tf2-stubs
+            cmake --build build -j2
+
+# Without a workflow, CircleCI only runs the job named "build"
+workflows:
+  build:
+    jobs:
+      - build
+      - textmode_build
